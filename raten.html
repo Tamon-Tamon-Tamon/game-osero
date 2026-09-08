@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>数字パズル（自動クリア判定）</title>
+<style>
+  body { font-size: 1.6rem; text-align: center; }
+  table { margin: auto; border-collapse: collapse; }
+
+  /* ★ 枠線を確実に見えるようにする */
+  td {
+    width: 40px; height: 40px;
+    border: 1px solid #333;
+    text-align: center;
+    background: #ffffff;
+  }
+
+  /* ★ input の枠線を消さない（ここが重要） */
+  input {
+    width: 100%;
+    height: 100%;
+    font-size: 1.4rem;
+    text-align: center;
+    border: 1px solid #aaa;   /* ← 枠線を付ける */
+    background: transparent;  /* td の色を見せる */
+  }
+
+  /* 正解（緑） */
+  .correct {
+    background: #c8f7c5 !important;
+  }
+
+  /* 間違い（赤） */
+  .wrong {
+    background: #f7c5c5 !important;
+  }
+</style>
+</head>
+<body>
+
+<h1>数字パズル（縦横に重複なし）</h1>
+
+サイズ：
+<select id="sizeSelect">
+  <option value="3">3×3</option>
+  <option value="6">6×6</option>
+  <option value="9">9×9</option>
+</select>
+
+難易度：
+<select id="levelSelect">
+  <option value="easy">やさしい</option>
+  <option value="normal">ふつう</option>
+  <option value="hard">むずかしい</option>
+</select>
+
+<button onclick="generatePuzzle()">スタート</button>
+
+<table id="board"></table>
+
+<script>
+let solution = [];
+
+function generateLatinSquare(n) {
+  const grid = [];
+  for (let r = 0; r < n; r++) {
+    const row = [];
+    for (let c = 0; c < n; c++) {
+      row.push((r + c) % n + 1);
+    }
+    grid.push(row);
+  }
+  return grid;
+}
+
+function generatePuzzle() {
+  const n = parseInt(document.getElementById("sizeSelect").value, 10);
+  const level = document.getElementById("levelSelect").value;
+
+  solution = generateLatinSquare(n);
+
+  let blankRate = 0.4;
+  if (level === "easy") blankRate = 0.2;
+  if (level === "hard") blankRate = 0.6;
+
+  const board = document.getElementById("board");
+  board.innerHTML = "";
+
+  for (let r = 0; r < n; r++) {
+    const tr = document.createElement("tr");
+    for (let c = 0; c < n; c++) {
+      const td = document.createElement("td");
+
+      if (Math.random() < blankRate) {
+        const inp = document.createElement("input");
+        inp.maxLength = 2;
+
+        // ★ リアルタイム判定＋自動クリア判定
+        inp.oninput = () => {
+          const val = parseInt(inp.value, 10);
+
+          td.classList.remove("correct", "wrong");
+
+          if (!val) return;
+
+          if (val === solution[r][c]) {
+            td.classList.add("correct");
+          } else {
+            td.classList.add("wrong");
+          }
+
+          autoCheckClear();
+        };
+
+        td.appendChild(inp);
+      } else {
+        td.textContent = solution[r][c];
+      }
+
+      tr.appendChild(td);
+    }
+    board.appendChild(tr);
+  }
+}
+
+function autoCheckClear() {
+  const n = solution.length;
+  const board = document.getElementById("board");
+
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) {
+      const td = board.rows[r].cells[c];
+
+      if (td.children.length > 0) {
+        const val = parseInt(td.children[0].value, 10);
+        if (val !== solution[r][c]) return;
+      }
+    }
+  }
+
+  alert("クリア！");
+}
+</script>
+
+</body>
+</html>
+
