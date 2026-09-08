@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>4桁の数字当てゲーム</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; margin-top: 40px; }
+    input { font-size: 20px; padding: 5px; width: 140px; text-align: center; }
+    button { font-size: 16px; padding: 8px 16px; margin-left: 8px; }
+    #log { margin-top: 20px; text-align: left; max-width: 400px; margin-inline: auto; }
+  </style>
+</head>
+<body>
+  <h1>4桁の数字当てゲーム</h1>
+
+  <p>答えの決め方を選んでください</p>
+
+  <label>
+    <input type="radio" name="mode" value="random" checked>
+    ランダムで決める
+  </label>
+  <label style="margin-left:20px;">
+    <input type="radio" name="mode" value="manual">
+    自分で答えを決める
+  </label>
+
+  <!-- 手動設定欄 -->
+  <div id="manualBox" style="margin-top:15px; display:none;">
+    <input id="manualAnswer" type="text" maxlength="4" placeholder="答えを入力（例：1234）">
+    <button id="setAnswerBtn">答えを設定</button>
+  </div>
+
+  <hr style="margin:25px 0;">
+
+  <input id="guessInput" type="text" maxlength="4" placeholder="予想（例：5678）">
+  <button id="guessBtn">判定</button>
+  <button id="resetBtn">リセット</button>
+
+  <p id="message"></p>
+  <div id="log"></div>
+
+  <script>
+    function createAnswer() {
+      const digits = ['0','1','2','3','4','5','6','7','8','9'];
+      for (let i = digits.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [digits[i], digits[j]] = [digits[j], digits[i]];
+      }
+      return digits.slice(0, 4).join('');
+    }
+
+    let answer = "";
+    let count = 0;
+
+    const guessInput = document.getElementById('guessInput');
+    const guessBtn   = document.getElementById('guessBtn');
+    const resetBtn   = document.getElementById('resetBtn');
+    const message    = document.getElementById('message');
+    const log        = document.getElementById('log');
+
+    const modeRadios = document.getElementsByName('mode');
+    const manualBox  = document.getElementById('manualBox');
+    const manualAnswer = document.getElementById('manualAnswer');
+    const setAnswerBtn = document.getElementById('setAnswerBtn');
+
+    function startGame() {
+      const mode = [...modeRadios].find(r => r.checked).value;
+
+      if (mode === "random") {
+        answer = createAnswer();
+        message.textContent = "ランダムで答えを設定しました。";
+        manualBox.style.display = "none";
+      } else {
+        answer = "";
+        message.textContent = "答えを入力して設定してください。";
+        manualBox.style.display = "block";
+        manualAnswer.value = "";
+      }
+
+      count = 0;
+      log.innerHTML = "";
+      guessBtn.disabled = false;
+      guessInput.value = "";
+      guessInput.focus();
+    }
+
+    modeRadios.forEach(radio => {
+      radio.addEventListener('change', startGame);
+    });
+
+    setAnswerBtn.addEventListener('click', () => {
+      const val = manualAnswer.value.trim();
+
+      if (!/^\d{4}$/.test(val)) {
+        message.textContent = "4桁の数字を入力してください。";
+        message.style.color = "red";
+        return;
+      }
+
+      if (new Set(val).size !== 4) {
+        message.textContent = "同じ数字は使えません（重複なし）。";
+        message.style.color = "red";
+        return;
+      }
+
+      // 答えを設定
+      answer = val;
+
+      // 入力欄を非表示にする
+      manualBox.style.display = "none";
+
+      message.textContent = "答えを設定しました。ゲーム開始できます。";
+      message.style.color = "green";
+    });
+
+    function checkGuess(ans, guess) {
+      let hit = 0;
+      let blow = 0;
+      for (let i = 0; i < 4; i++) {
+        if (guess[i] === ans[i]) hit++;
+        else if (ans.includes(guess[i])) blow++;
+      }
+      return { hit, blow };
+    }
+
+    guessBtn.addEventListener('click', () => {
+      if (!answer) {
+        message.textContent = "まず答えを設定してください。";
+        message.style.color = "red";
+        return;
+      }
+
+      const guess = guessInput.value.trim();
+
+      if (!/^\d{4}$/.test(guess)) {
+        message.textContent = "4桁の数字を入力してください。";
+        message.style.color = "red";
+        return;
+      }
+
+      if (new Set(guess).size !== 4) {
+        message.textContent = "同じ数字は使えません（重複なし）。";
+        message.style.color = "red";
+        return;
+      }
+
+      count++;
+      const { hit, blow } = checkGuess(answer, guess);
+
+      const line = document.createElement('div');
+      line.textContent = `${count}回目: ${guess} → Hit: ${hit}, Blow: ${blow}`;
+      log.appendChild(line);
+
+      if (hit === 4) {
+        message.textContent = `正解！ ${count}回で当てました！ 答えは ${answer} でした。`;
+        message.style.color = "green";
+        guessBtn.disabled = true;
+      } else {
+        message.textContent = "ヒントを見て、もう一度考えてみよう。";
+        message.style.color = "black";
+      }
+
+      guessInput.value = "";
+      guessInput.focus();
+    });
+
+    resetBtn.addEventListener('click', startGame);
+
+    startGame();
+  </script>
+</body>
+</html>
+
