@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>オセロ（アニメーション付き）</title>
+<style>
+  body { font-size: 1.6rem; text-align: center; }
+  table { margin: auto; border-collapse: collapse; }
+
+  /* 盤面は白背景、線を太くして見やすくする */
+  td {
+    width: 60px; height: 60px;
+    border: 2px solid #333;
+    background: #ffffff;
+    cursor: pointer;
+  }
+
+  /* 石（黒丸・白丸） */
+  .black, .white {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    transition: background 0.3s;
+  }
+  .black { background: black; }
+  .white { background: white; border: 2px solid #000; }
+
+  /* 置ける場所は薄いグレー */
+  .valid {
+    background: #cccccc !important;
+  }
+
+  /* ひっくり返るアニメーション */
+  .flip {
+    animation: flipAnim 0.3s linear;
+  }
+
+  @keyframes flipAnim {
+    0%   { transform: rotateY(0deg); }
+    50%  { transform: rotateY(90deg); }
+    100% { transform: rotateY(180deg); }
+  }
+</style>
+</head>
+<body>
+
+<h1>オセロ（タブレット1台）</h1>
+
+<button onclick="setMode('ai')">AI対戦モード</button>
+<button onclick="setMode('2p')">2人対戦モード</button>
+
+<p id="modeText">現在：2人対戦モード</p>
+<p id="turn">現在のターン：黒</p>
+<p id="count">黒：2　白：2</p>
+
+<table id="board"></table>
+
+<script>
+const SIZE = 8;
+let board = [];
+let turn = "black";
+let validMoves = [];
+let mode = "2p";
+
+/* --- 初期化 --- */
+function initBoard() {
+  board = Array.from({ length: SIZE }, () => Array(SIZE).fill(""));
+  board[3][3] = "white";
+  board[3][4] = "black";
+  board[4][3] = "black";
+  board[4][4] = "white";
+}
+
+/* --- モード切替 --- */
+function setMode(m) {
+  mode = m;
+  document.getElementById("modeText").innerText =
+    (mode === "ai") ? "現在：AI対戦モード" : "現在：2人対戦モード";
+}
+
+/* --- 石の数 --- */
+function countStones() {
+  let black = 0, white = 0;
+  for (let r = 0; r < SIZE; r++)
+    for (let c = 0; c < SIZE; c++) {
+      if (board[r][c] === "black") black++;
+      if (board[r][c] === "white") white++;
+    }
+  document.getElementById("count").innerText = `黒：${black}　白：${white}`;
+}
+
+/* --- 勝敗判定 --- */
+function checkWinner() {
+  let black = 0, white = 0;
+  for (let r = 0; r < SIZE; r++)
+    for (let c = 0; c < SIZE; c++) {
+      if (board[r][c] === "black") black++;
+      if (board[r][c] === "white") white++;
+    }
+
+  if (black + white === SIZE * SIZE) {
+    if (black > white) alert(`黒の勝ち！ 黒:${black} 白:${white}`);
+    else if (white > black) alert(`白の勝ち！ 黒:${black} 白:${white}`);
+    else alert(`引き分け！ 黒:${black} 白:${white}`);
+  }
+}
+
+/* --- 反転判定 --- */
+function getFlips(r, c, color) {
+  if (board[r][c] !== "") return [];
+  const opp = color === "black" ? "white" : "black";
+  const dirs = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+  let flips = [];
+
+  for (let [dr, dc] of dirs) {
+    let rr = r + dr, cc = c + dc;
+    let temp = [];
+    while (rr >= 0 && rr < SIZE && cc >= 0 && cc < SIZE && board[rr][cc] === opp) {
+      temp.push([rr, cc]);
+      rr += dr; cc += dc;
+    }
+    if (temp.length > 0 &&
+        rr >= 0 && rr < SIZE && cc >= 0 && cc < SIZE &&
+        board[rr][cc] === color) {
+      flips = flips.concat(temp);
+    }
+  }
+  return flips;
+}
+
+/* --- 置ける場所更新 --- */
+function updateValidMoves() {
+  validMoves = [];
+  for (let r = 0; r < SIZE; r++)
+    for (let c = 0; c < SIZE; c++)
+      if (getFlips(r, c, turn).length > 0)
+        validMoves.push([r, c]);
+}
+
+/* --- AIの手（白） --- */
+function aiMove() {
+  let moves = [];
+  for (let r = 0; r < SIZE; r++)
+    for (let c = 0; c < SIZE; c++)
+      if (getFlips(r, c, "white").length > 0)
+        moves.push([r, c]);
+
+  if (moves.length === 0) {
+    alert("AI（白）は置ける場所がありません → パス");
+    turn = "black";
+    updateValidMoves();
+    drawBoard();
+    return;
+  }
+
+  const [r, c] = moves[Math.floor(Math.random() * moves.length)];
+  const flips = getFlips(r, c, "white");
+
+  board[r][c] = "white";
+  flips.forEach(([rr, cc]) => board[rr][cc] = "white");
+
+  countStones();
+  checkWinner();
+
+  turn = "black";
+  updateValidMoves();
+  drawBoard();
+}
+
+/* --- 盤面描画（置ける場所グレー＋アニメーション） --- */
+function drawBoard() {
+  const tbl = document.getElementById("board");
+  tbl.innerHTML = "";
+
+  for (let r = 0; r < SIZE; r++) {
+    const row = document.createElement("tr");
+    for (let c = 0; c < SIZE; c++) {
+      const cell = document.createElement("td");
+      cell.onclick = () => place(r, c);
+
+      if (validMoves.some(v => v[0] === r && v[1] === c))
+        cell.classList.add("valid");
+
+      if (board[r][c]) {
+        const stone = document.createElement("div");
+        stone.className = board[r][c];
+
+        /* アニメーションを付ける */
+        stone.classList.add("flip");
+
+        cell.appendChild(stone);
+      }
+      row.appendChild(cell);
+    }
+    tbl.appendChild(row);
+  }
+}
+
+/* --- 石を置く（人間） --- */
+function place(r, c) {
+  const flips = getFlips(r, c, turn);
+  if (flips.length === 0) return;
+
+  board[r][c] = turn;
+  flips.forEach(([rr, cc]) => board[rr][cc] = turn);
+
+  countStones();
+  checkWinner();
+
+  turn = (turn === "black") ? "white" : "black";
+  document.getElementById("turn").innerText =
+    `現在のターン：${turn === "black" ? "黒" : "白"}`;
+
+  updateValidMoves();
+  drawBoard();
+
+  if (mode === "ai" && turn === "white") {
+    setTimeout(aiMove, 500);
+  }
+}
+
+/* --- 初期化 --- */
+initBoard();
+updateValidMoves();
+drawBoard();
+countStones();
+</script>
+
+</body>
+</html>
+
