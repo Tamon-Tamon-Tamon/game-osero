@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>KenKen Tablet Version</title>
+
+<style>
+  body {
+    font-family: sans-serif;
+    margin: 20px;
+  }
+
+  #board {
+    display: inline-block;
+    margin-top: 20px;
+  }
+
+  .row {
+    display: flex;
+  }
+
+  .cell {
+    width: 70px;
+    height: 70px;
+    border: 1px solid #ccc;
+    position: relative;
+  }
+
+  .hint {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    font-size: 20px;
+    font-weight: bold;
+  }
+
+  .inputbox {
+    width: 100%;
+    height: 100%;
+    font-size: 32px;
+    text-align: center;
+    border: none;
+    background: transparent;
+  }
+
+  #numpad {
+    margin-top: 20px;
+    display: none;
+  }
+
+  .num-btn {
+    width: 60px;
+    height: 60px;
+    font-size: 28px;
+    margin: 5px;
+  }
+
+  #clear-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 60px;
+    color: white;
+    font-weight: bold;
+    z-index: 9999;
+  }
+
+  @media (max-width: 800px) {
+    .cell {
+      width: 55px;
+      height: 55px;
+    }
+    .inputbox {
+      font-size: 26px;
+    }
+    .hint {
+      font-size: 16px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<h2>KenKen（タブレット版）</h2>
+
+サイズ：
+<select id="size">
+  <option value="4">4×4</option>
+  <option value="5">5×5</option>
+  <option value="6">6×6</option>
+</select>
+
+難易度：
+<select id="difficulty">
+  <option value="easy">やさしい</option>
+  <option value="medium">ふつう</option>
+  <option value="hard">むずかしい</option>
+</select>
+
+<button id="generate">生成</button>
+<button id="check">答え合わせ</button>
+
+<div id="board"></div>
+
+<!-- 数字パッド -->
+<div id="numpad"></div>
+
+<script>
+/* -----------------------------
+   ラテン方格生成
+----------------------------- */
+function generateLatinSquare(n) {
+  const grid = [];
+  for (let r = 0; r < n; r++) {
+    grid[r] = [];
+    for (let c = 0; c < n; c++) {
+      grid[r][c] = (r + c) % n + 1;
+    }
+  }
+  return grid;
+}
+
+/* -----------------------------
+   ケージ生成
+----------------------------- */
+function generateCages(grid, difficulty) {
+  const n = grid.length;
+  const used = Array.from({ length: n }, () => Array(n).fill(false));
+  const cages = [];
+
+  const maxSize = difficulty === 'easy' ? 2 :
+                  difficulty === 'medium' ? 3 : 4;
+
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) {
+      if (used[r][c]) continue;
+
+      const cage = [[r, c]];
+      used[r][c] = true;
+
+      while (cage.length < maxSize) {
+        const [rr, cc] = cage[Math.floor(Math.random() * cage.length)];
+        const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+        const d = dirs[Math.floor(Math.random() * dirs.length)];
+        const nr = rr + d[0], nc = cc + d[1];
+
+        if (nr >= 0 && nr < n && nc >= 0 && nc < n && !used[nr][nc]) {
+          cage.push([nr, nc]);
+          used[nr][nc] = true;
+        } else break;
+      }
+
+      cages.push(cage);
+    }
+  }
+  return cages;
+}
+
+/* -----------------------------
+   演算と目標値
+----------------------------- */
+function chooseOperationAndTarget(nums, difficulty) {
+  const opsEasy = ['+','×'];
+  const opsMedium = ['+','×','−'];
+  const opsHard = ['+','×','−','÷'];
+
+  const ops = difficulty === 'easy' ? opsEasy :
+              difficulty === 'medium' ? opsMedium : opsHard;
+
+  let op = ops[Math.floor(Math.random() * ops.length)];
+  let target;
+
+  if (nums.length === 1) {
+    op = '';
+    target = nums[0];
+  } else if (op === '+') {
+    target = nums.reduce((a,b)=>a+b,0);
+  } else if (op === '×') {
+    target = nums.reduce((a,b)=>a*b,1);
+  } else if (op === '−') {
+    target = Math.abs(nums[0] - nums[1]);
+  } else if (op === '÷') {
+    const a = Math.max(...nums), b = Math.min(...nums);
+    target = a / b;
+  }
+
+  return { op, target };
+}
+
+/* -----------------------------
+   ケージ左上判定
+----------------------------- */
+function getTopLeftCell(cage) {
+  return cage.reduce((min, cell) => {
+    const [r, c] = cell;
+    if (r < min[0] || (r === min[0] && c < min[1])) {
+      return [r, c];
+    }
+    return min;
+  }, cage[0]);
+}
+
+/* -----------------------------
+   ケージ情報まとめ
+----------------------------- */
+function buildCageInfo(grid, cages, difficulty) {
+  return cages.map((cage, id) => {
+    const nums = cage.map(([r,c]) => grid[r][c]);
+    const { op, target } = chooseOperationAndTarget(nums, difficulty);
+    const topLeft = getTopLeftCell(cage);
+    return { id, cage, op, target, topLeft };
+  });
+}
+
+/* -----------------------------
+   ケージマップ
+----------------------------- */
+function buildCageMap(n, cages) {
+  const cageMap = Array.from({ length: n }, () => Array(n).fill(null));
+  cages.forEach((cage, id) => {
+    cage.forEach(([r,c]) => {
+      cageMap[r][c] = id;
+    });
+  });
+  return cageMap;
+}
+
+/* -----------------------------
+   ケージ色
+----------------------------- */
+function randomPastel() {
+  const r = Math.floor(Math.random() * 128 + 128);
+  const g = Math.floor(Math.random() * 128 + 128);
+  const b = Math.floor(Math.random() * 128 + 128);
+  return `rgb(${r},${g},${b})`;
+}
+
+function assignColors(cages) {
+  const colors = {};
+  cages.forEach((_, id) => {
+    colors[id] = randomPastel();
+  });
+  return colors;
+}
+
+/* -----------------------------
+   太枠判定
+----------------------------- */
+function getBorders(r, c, cageMap) {
+  const n = cageMap.length;
+  const id = cageMap[r][c];
+
+  const borders = { top:false, bottom:false, left:false, right:false };
+
+  if (r === 0 || cageMap[r-1][c] !== id) borders.top = true;
+  if (r === n-1 || cageMap[r+1][c] !== id) borders.bottom = true;
+  if (c === 0 || cageMap[r][c-1] !== id) borders.left = true;
+  if (c === n-1 || cageMap[r][c+1] !== id) borders.right = true;
+
+  return borders;
+}
+
+/* -----------------------------
+   描画
+----------------------------- */
+let selectedCell = null;
+
+function renderBoard(grid, cageMap, cageInfo, cageColors) {
+  const board = document.getElementById("board");
+  board.innerHTML = "";
+  const n = grid.length;
+
+  // 数字パッド生成
+  const numpad = document.getElementById("numpad");
+  numpad.innerHTML = "";
+  for (let i = 1; i <= n; i++) {
+    const btn = document.createElement("button");
+    btn.className = "num-btn";
+    btn.textContent = i;
+    btn.onclick = () => {
+      if (selectedCell) selectedCell.value = i;
+    };
+    numpad.appendChild(btn);
+  }
+
+  for (let r = 0; r < n; r++) {
+    const row = document.createElement("div");
+    row.className = "row";
+
+    for (let c = 0; c < n; c++) {
+      const cell = document.createElement("div");
+      cell.className = "cell";
+
+      const cageId = cageMap[r][c];
+      cell.style.backgroundColor = cageColors[cageId];
+
+      const borders = getBorders(r, c, cageMap);
+      if (borders.top) cell.style.borderTop = "3px solid black";
+      if (borders.bottom) cell.style.borderBottom = "3px solid black";
+      if (borders.left) cell.style.borderLeft = "3px solid black";
+      if (borders.right) cell.style.borderRight = "3px solid black";
+
+      const info = cageInfo[cageId];
+      if (info.topLeft[0] === r && info.topLeft[1] === c) {
+        const hint = document.createElement("div");
+        hint.className = "hint";
+        hint.textContent = info.op ? `${info.target}${info.op}` : info.target;
+        cell.appendChild(hint);
+      }
+
+      const input = document.createElement("input");
+      input.type = "text";
+      input.maxLength = 1;
+      input.className = "inputbox";
+      input.id = `cell-${r}-${c}`;
+
+      input.onclick = () => {
+        selectedCell = input;
+        numpad.style.display = "block";
+      };
+
+      input.oninput = () => {
+        const v = input.value;
+        if (!/^[1-9]$/.test(v)) input.value = "";
+      };
+
+      cell.appendChild(input);
+      row.appendChild(cell);
+    }
+
+    board.appendChild(row);
+  }
+}
+
+/* -----------------------------
+   解答取得
+----------------------------- */
+function getUserGrid(n) {
+  const grid = [];
+  for (let r = 0; r < n; r++) {
+    grid[r] = [];
+    for (let c = 0; c < n; c++) {
+      const v = document.getElementById(`cell-${r}-${c}`).value;
+      grid[r][c] = Number(v);
+    }
+  }
+  return grid;
+}
+
+/* -----------------------------
+   行・列チェック
+----------------------------- */
+function checkRowsAndCols(grid) {
+  const n = grid.length;
+
+  for (let r = 0; r < n; r++) {
+    const rowSet = new Set(grid[r]);
+    if (rowSet.size !== n) return false;
+  }
+
+  for (let c = 0; c < n; c++) {
+    const colSet = new Set(grid.map(row => row[c]));
+    if (colSet.size !== n) return false;
+  }
+
+  return true;
+}
+
+/* -----------------------------
+   ケージチェック
+----------------------------- */
+function checkCages(grid, cageInfo) {
+  for (const info of cageInfo) {
+    const nums = info.cage.map(([r,c]) => grid[r][c]);
+
+    let result;
+    if (info.op === '+') {
+      result = nums.reduce((a,b)=>a+b,0);
+    } else if (info.op === '×') {
+      result = nums.reduce((a,b)=>a*b,1);
+    } else if (info.op === '−') {
+      result = Math.abs(nums[0] - nums[1]);
+    } else if (info.op === '÷') {
+      const a = Math.max(...nums), b = Math.min(...nums);
+      result = a / b;
+    } else {
+      result = nums[0];
+    }
+
+    if (result !== info.target) return false;
+  }
+
+  return true;
+}
+
+/* -----------------------------
+   総合判定
+----------------------------- */
+function isCorrect(grid, cageInfo) {
+  return checkRowsAndCols(grid) && checkCages(grid, cageInfo);
+}
+
+/* -----------------------------
+   クリア表示
+----------------------------- */
+function showClearScreen() {
+  const div = document.createElement("div");
+  div.id = "clear-screen";
+  div.textContent = "クリア！";
+  document.body.appendChild(div);
+}
+
+/* -----------------------------
+   イベント
+----------------------------- */
+let grid, cages, cageInfo, cageMap, cageColors;
+
+document.getElementById("generate").onclick = () => {
+  const n = Number(document.getElementById("size").value);
+  const difficulty = document.getElementById("difficulty").value;
+
+  grid = generateLatinSquare(n);
+  cages = generateCages(grid, difficulty);
+  cageInfo = buildCageInfo(grid, cages, difficulty);
+  cageMap = buildCageMap(n, cages);
+  cageColors = assignColors(cages);
+
+  renderBoard(grid, cageMap, cageInfo, cageColors);
+};
+
+document.getElementById("check").onclick = () => {
+  const n = Number(document.getElementById("size").value);
+  const userGrid = getUserGrid(n);
+
+  if (isCorrect(userGrid, cageInfo)) {
+    showClearScreen();
+  } else {
+    alert("まだ正解じゃないよ！");
+  }
+};
+</script>
+
+</body>
+</html>
